@@ -1,34 +1,240 @@
 ---
 title: "EV Power - Lab 4 Project Report"
+author: Joseph Levin
 format: typst
 ---
 
-# Example Solution 1
-
-## **Part 0: libraries**
+# **Library Installations**
 
 ```{r}
+#| output: false
+library(ggplot2)
+library(tibble)
+library(dplyr)
+library(tidyr)
+library(tidytext)
+library(stringr)
+library(maps)
+library(sf)
+```
+
+# **Overview**
+Research Questions:
+
+- **"Which states contained the most EV registrations in 2023?"**
+- **"What is the change in renewable energy usage across each state from 2021 to 2023?"** 
+- **"What is the share of total energy usage that is renewable energy across each state in 2023, and is this related to how many EV registrations in each state in 2023?"** 
+
+# **Data and Methods**
+
+## **Data Preparation & Cleaning**
+
+```{r}
+#| echo: false
+ev_reg_2023 <- read.csv('data/ev-registrations-by-state-2023.csv')
+ev_reg_2023 <- ev_reg_2023 |> slice(-(1:2)) |> rename(State = electric.vehicle.registrations_by_state..2023., Count = X)
+ev_reg_2023$Count <- c(13047, 2697, 89798, 7108, 1256646, 90083, 31557, 8435, 8066, 254878, 
+92368, 25565, 8501, 99573, 26101, 9031, 11271, 11617, 8150, 7377, 72139, 73768, 50284, 37050, 3590, 26861, 4608, 6920, 47361, 9861, 134753, 10276, 131250, 70164, 959, 50393, 22843, 64361, 70154, 6396, 20873, 1675, 33221, 230125, 39998, 7816, 84936, 152101, 2758, 24943, 1139, 3555445)
+ev_reg_2023$Count <- as.integer(ev_reg_2023$Count)
+ev_reg_2023 <- ev_reg_2023 |> slice(1:51)
+
+head(ev_reg_2023, 5)
+```
+
+
+
+```{r}
+#| echo: false
+# Loading CSV files
+
+renew_use_2021 <- read.csv('data/renew-use-2021.csv') |> filter(State != 'US')
+renew_use_2022 <- read.csv('data/renew-use-2022.csv') |> filter(State != 'US')
+renew_use_2023 <- read.csv('data/renew-use-2023.csv') |> filter(State != 'US')
+
+av_energy_price_2021_2023 <- read.csv('data/av-energy-price-2021-2023.csv')
+total_use_2021 <- read.csv('data/total-use-2021.csv')
+total_use_2022 <- read.csv('data/total-use-2022.csv')
+total_use_2023 <- read.csv('data/total-use-2023.csv')
+```
+
+
+```{r}
+#| echo: false
+# Cleaning / Standardizing Columns
+
+renew_use_2021$State <- str_to_upper(renew_use_2021$State)
+renew_use_2022$State <- str_to_upper(renew_use_2022$State)
+renew_use_2023$State <- str_to_upper(renew_use_2023$State)
+
+
+renew_use_2021$Renewable_Use_2021 <- str_extract(renew_use_2021$Renewable_Use_2021, "\\d+")
+renew_use_2022$Renewable_Use_2022 <- str_extract(renew_use_2022$Renewable_Use_2022, "\\d+")
+renew_use_2023$Renewable_Use_2023 <- str_extract(renew_use_2023$Renewable_Use_2023, "\\d+")
+
+renew_use_2021$Renewable_Use_2021 <- as.integer(renew_use_2021$Renewable_Use_2021)
+renew_use_2022$Renewable_Use_2022 <- as.integer(renew_use_2022$Renewable_Use_2022)
+renew_use_2023$Renewable_Use_2023 <- as.integer(renew_use_2023$Renewable_Use_2023)
+
+renew_use <- left_join(renew_use_2021, renew_use_2022)
+renew_use <- left_join(renew_use, renew_use_2023)
+```
+
+```{r}
+#| echo: false
+# Cleaning / Standardizing Columns
+
+total_use_2021 <- pivot_longer(total_use_2021, cols = c(-"Energy_Source"), names_to = "State", values_to = "Total_Use_2021")
+total_use_2022 <- pivot_longer(total_use_2022, cols = c(-"Energy_Source"), names_to = "State", values_to = "Total_Use_2022")
+total_use_2023 <- pivot_longer(total_use_2023, cols = c(-"Energy_Source"), names_to = "State", values_to = "Total_Use_2023")
+
+total_use_2021 <- total_use_2021 |> filter(State != 'US')
+total_use_2022 <- total_use_2022 |> filter(State != 'US')
+total_use_2023 <- total_use_2023 |> filter(State != 'US')
+
+total_use_2021$State <- str_to_upper(total_use_2021$State)
+total_use_2022$State <- str_to_upper(total_use_2022$State)
+total_use_2023$State <- str_to_upper(total_use_2023$State)
+```
+
+```{r}
+#| echo: false
+renew_use_2021 <- renew_use_2021 |> group_by(State) |> summarize(Renew_Use_2021 = sum(Renewable_Use_2021))
+
+renew_use_2022 <- renew_use_2022 |> group_by(State) |> summarize(Renew_Use_2022 = sum(Renewable_Use_2022))
+
+renew_use_2023 <- renew_use_2023 |> group_by(State) |> summarize(Renew_Use_2023 = sum(Renewable_Use_2023))
+
+total_use_2021 <- total_use_2021 |> group_by(State) |> summarize(Total_2021 = sum(Total_Use_2021))
+
+total_use_2022 <- total_use_2022 |> group_by(State) |> summarize(Total_2022 = sum(Total_Use_2022))
+
+total_use_2023 <- total_use_2023 |> group_by(State) |> summarize(Total_2023 = sum(Total_Use_2023))
+
+head(renew_use_2021, 5)
+head(renew_use_2023, 5)
+head(total_use_2021, 5)
+head(total_use_2023, 5)
+
 
 ```
 
-## **Part 1:** **Defining Research Question**
-
-Chosen Question:
-
-## **Part 2: Data Preparation and Cleaning**
+## **Joining / Pivoting Datasets for Analysis**
 
 ```{r}
+#| echo: false
+renew_use <- left_join(renew_use_2021, renew_use_2022)
+total_use <- left_join(total_use_2021, total_use_2022)
+```
+
+```{r}
+#| echo: false
+renew_use <- left_join(renew_use, renew_use_2023)
+total_use <- left_join(total_use, total_use_2023)
+
 
 ```
 
-## **Part 3: Joining / Pivoting Datasets for Analysis**
-
 ```{r}
+#| echo: false
+renew_diff <- renew_use |> group_by(State) |> summarize(Renew_Difference = Renew_Use_2023 - Renew_Use_2021) |> mutate(Renew_Difference = replace_na(Renew_Difference, 0))
+total_diff <- total_use |> group_by(State) |> summarize(Total_Difference = Total_2023 - Total_2021) 
 
 ```
 
-## **Part 4: Mapping Visualization**
-
 ```{r}
+#| echo: false
+share_2023 <- left_join(renew_use_2023, total_use_2023) |> group_by(State) |> summarize(Renew_Share = Renew_Use_2023 / Total_2023)
 
 ```
+
+```{r}
+#| echo: false
+library(maps)
+renew_use <- renew_use |> mutate(State = tolower(state.name[match(State, state.abb)])) |> mutate(State = replace_na(State, "district of columbia"))
+
+renew_diff <- renew_diff |> mutate(State = tolower(state.name[match(State, state.abb)])) |> mutate(State = replace_na(State, "district of columbia")) 
+
+total_use <- total_use |> mutate(State = tolower(state.name[match(State, state.abb)])) |> mutate(State = replace_na(State, "district of columbia"))
+
+total_diff <- total_diff |> mutate(State = tolower(state.name[match(State, state.abb)])) |> mutate(State = replace_na(State, "district of columbia"))
+
+share_2023 <- share_2023 |> mutate(State = tolower(state.name[match(State, state.abb)])) |> mutate(State = replace_na(State, "district of columbia"))
+
+head(renew_use, 5)
+head(total_use, 5)
+
+head(renew_diff, 5)
+head(total_diff, 5)
+
+head(share_2023, 5)
+```
+
+
+# **Mapping Visualization**
+
+```{r}
+#| echo: false
+us_map <- map("state", fill = TRUE, plot = FALSE)
+us_sf <- st_as_sf(us_map)
+```
+
+```{r}
+#| echo: false
+renew_diff_map <- left_join(us_sf, renew_diff, by = join_by(ID == State))
+ggplot(renew_diff_map, aes(fill = Renew_Difference)) + geom_sf(color = "black", linewidth = 0.1) + scale_fill_gradient2(
+    low = "red",
+    mid = "white",
+    high = "blue",
+    midpoint = 0,
+    limits = c(-300000, 300000)
+  ) + theme(legend.title = element_blank()) + theme(panel.background = element_blank()) + labs(title = "Change in Renewable Energy Usage ($), 2021 - 2023")
+```
+
+```{r}
+#| echo: false
+share_map <- left_join(us_sf, share_2023, by = join_by(ID == State))
+
+share_map |> ggplot(aes(fill = Renew_Share)) + geom_sf(color ="black", linewidth = 0.1) + scale_fill_gradient2(
+    low = "red",
+    mid = "white",
+    high = "blue",
+    midpoint = 0,
+    limits = c(0, 1)
+  ) + theme(legend.title = element_blank()) + theme(panel.background = element_blank()) + labs(title = "Renewable Proportion of Total Energy Use (2023)")
+```
+```{r}
+#| echo: false
+ev_reg_2023 <- ev_reg_2023 |> mutate(State = tolower(State))
+ev_reg_map <- left_join(us_sf, ev_reg_2023, by = join_by(ID == State))
+
+ggplot(ev_reg_map, aes(fill = Count)) + geom_sf(color = "black", linewidth = 0.1) + scale_fill_gradient2(
+    low = "red",
+    mid = "white",
+    high = "blue",
+    midpoint = 0,
+    limits = c(0, 2000000)
+  ) + theme(legend.title = element_blank()) + theme(panel.background = element_blank()) + labs(title = "EV Registrations Counts (2023)")
+```
+
+```{r}
+#| echo: false
+total_map <- left_join(us_sf, total_use, by = join_by(ID == State))
+
+ggplot(total_map, aes(fill = Total_2023)) + geom_sf(color = "black", linewidth = 0.1) + scale_fill_gradient2(
+    low = "red",
+    mid = "white",
+    high = "blue",
+    midpoint = 0,
+    limits = c(0, 20000000)
+  ) + theme(legend.title = element_blank()) + theme(panel.background = element_blank()) + labs(title = "Total Energy Usage ($) - 2023")
+```
+
+# **Analysis**
+
+I created four maps, one that shows the change in renewable energy usage from 2021 to 2023 across each state, one that shows the share of total energy usage that is renewable in 2023 across each state, one that shows the number of EV registrations in 2023 across each state, and one that shows the total energy usage in 2023 across each state.
+
+I notice that in certain states, such as California and Texas, the largest increases in renewable energy usage from 2021 to 2023 are linked with large numbers of EV registrations in 2023. However, these states are not represented in the states that have the largest shares of renewable energy usage. I perceive this to be the case, because when looking at the total energy usage map, California and Texas are the states with the most energy used in total for the year 2023, so it's possible that the renewable energy share seems "watered down" due to the larger amount of total energy used, compared to other states. 
+
+That being said, South Dakota and Iowa seem to be some of the states with the largest shares of renewable energy in 2023, however in that same year, the seemingly have very low counts of EV registrations. My interpretation of this finding is that the demographic may be different in those states compared to California or Texas (i.e. more farmland and rural area), where it's a possibility that those states would utilize larger proportions of renewable energy, also given that their total energy usage is likely lower due to a smaller population.
+
+So to conclude, it's not enough to just look at purely the count of EV registrations, the share of renewable energy usage, or the change in renewable energy usage across certain years to answer these kinds of research questions, because things such as population, demographic differences, and state laws are important factors that have effects on this data. 
